@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mini Calculator</title>
+  <style>
+    :root{--bg:#0f1724;--panel:#0b1220;--accent:#7c3aed;--muted:#94a3b8;--glass:rgba(255,255,255,0.04)}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#061428 0%,#071423 100%);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,'Helvetica Neue',Arial}
+    .calc{width:340px;background:linear-gradient(180deg,var(--panel),#061427);border-radius:14px;padding:18px;box-shadow:0 10px 30px rgba(2,6,23,0.7);color:white}
+    .screen{height:86px;border-radius:12px;padding:12px;background:var(--glass);display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:6px}
+    .expr{font-size:14px;color:var(--muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .output{font-size:28px;font-weight:600}
+    .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+    button{height:56px;border-radius:10px;border:0;background:rgba(255,255,255,0.03);color:inherit;font-size:18px;cursor:pointer;box-shadow:inset 0 -2px 0 rgba(0,0,0,0.25)}
+    button.op{background:linear-gradient(180deg,rgba(124,58,237,0.2),rgba(124,58,237,0.12));color:var(--accent);font-weight:600}
+    button.accent{background:transparent;border:1px solid rgba(255,255,255,0.04)}
+    button.wide{grid-column:span 2}
+    footer{font-size:12px;color:var(--muted);text-align:center;margin-top:12px}
+    @media (max-width:380px){.calc{width:92vw}}
+  </style>
+</head>
+<body>
+  <div class="calc" role="application" aria-label="Mini calculator">
+    <div class="screen" id="screen">
+      <div class="expr" id="expr">&nbsp;</div>
+      <div class="output" id="output">0</div>
+    </div>
+
+    <div class="keys">
+      <button class="accent" data-action="clear">C</button>
+      <button class="accent" data-action="back">⌫</button>
+      <button class="accent" data-action="percent">%</button>
+      <button class="op" data-value="/">÷</button>
+
+      <button data-value="7">7</button>
+      <button data-value="8">8</button>
+      <button data-value="9">9</button>
+      <button class="op" data-value="*">×</button>
+
+      <button data-value="4">4</button>
+      <button data-value="5">5</button>
+      <button data-value="6">6</button>
+      <button class="op" data-value="-">−</button>
+
+      <button data-value="1">1</button>
+      <button data-value="2">2</button>
+      <button data-value="3">3</button>
+      <button class="op" data-value="+">+</button>
+
+      <button data-value="0" class="wide">0</button>
+      <button data-value=".">.</button>
+      <button class="op" data-action="equals">=</button>
+    </div>
+
+    <footer>Tip: you can use keyboard (numbers, + - * / Enter Backspace).</footer>
+  </div>
+
+  <script>
+    (function(){
+      const exprEl = document.getElementById('expr');
+      const outEl = document.getElementById('output');
+      let expr = '';
+
+      function sanitizeForEval(s){
+        // allow digits, dot, + - * / % and parentheses
+        return s.replace(/[^0-9.+\-*/()%]/g, '')
+          .replace(/×/g,'*').replace(/÷/g,'/');
+      }
+
+      function updateScreen(){
+        exprEl.textContent = expr || '\u00A0';
+        outEl.textContent = previewResult() ?? '0';
+      }
+
+      function previewResult(){
+        try{
+          const s = sanitizeForEval(expr);
+          if(!s) return '0';
+          // don't eval trailing operator
+          if(/[+\-*/.%]$/.test(s)) return '';
+          const value = Function('return ('+s+')')();
+          return (value === undefined || Number.isNaN(value)) ? '' : String(value);
+        }catch(e){return ''}
+      }
+
+      function press(char){
+        if(char === 'clear') { expr = ''; updateScreen(); return }
+        if(char === 'back') { expr = expr.slice(0,-1); updateScreen(); return }
+        if(char === 'percent') { expr += '%'; updateScreen(); return }
+        if(char === 'equals') { calculate(); return }
+
+        // general value
+        // prevent multiple dots in a number segment
+        if(char === '.'){
+          // find last non-digit/dot char
+          const parts = expr.split(/[^0-9.]/);
+          const last = parts[parts.length-1];
+          if(last.includes('.')) return; // ignore
+        }
+        expr += char;
+        updateScreen();
+      }
+
+      function calculate(){
+        try{
+          let s = sanitizeForEval(expr);
+          if(!s) return;
+          // handle percent: convert n% to (n/100)
+          s = s.replace(/(\d+(?:\.\d+)?)%/g, '($1/100)');
+          // avoid trailing operator
+          s = s.replace(/[+\-*/.%]+$/,'');
+          const value = Function('return ('+s+')')();
+          expr = String(value);
+          updateScreen();
+        }catch(e){ outEl.textContent = 'Error' }
+      }
+
+      document.querySelectorAll('button').forEach(btn=>{
+        const v = btn.dataset.value;
+        const a = btn.dataset.action;
+        btn.addEventListener('click', ()=>{ if(a) press(a); else press(v); });
+      });
+
+      // keyboard support
+      window.addEventListener('keydown', (ev)=>{
+        const allowed = '0123456789+-*/().%';
+        if(ev.key === 'Enter' || ev.key === '=') { ev.preventDefault(); press('equals'); return }
+        if(ev.key === 'Backspace') { ev.preventDefault(); press('back'); return }
+        if(ev.key === 'Escape') { ev.preventDefault(); press('clear'); return }
+        if(allowed.includes(ev.key)) { ev.preventDefault(); press(ev.key); return }
+      });
+
+      // init
+      updateScreen();
+    })();
+  </script>
+</body>
+</html>
